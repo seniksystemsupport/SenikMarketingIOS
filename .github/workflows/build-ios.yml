@@ -1,0 +1,63 @@
+name: Build unsigned iOS IPA
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract Xcode project
+        run: |
+          rm -rf buildsrc
+          mkdir buildsrc
+          unzip -q SenikMarketingIOS-ci.zip -d buildsrc
+          ls -la buildsrc/SenikMarketingIOS
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build iPhone app without signing
+        working-directory: buildsrc/SenikMarketingIOS
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project SenikMarketing.xcodeproj \
+            -scheme SenikMarketing \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/SenikDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            clean build | tee "$RUNNER_TEMP/xcodebuild.log"
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find "$RUNNER_TEMP/SenikDerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$APP_PATH"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry SenikMarketing-unsigned.ipa Payload
+          shasum -a 256 SenikMarketing-unsigned.ipa > SenikMarketing-unsigned.ipa.sha256
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: SenikMarketing-unsigned-IPA
+          path: |
+            ${{ runner.temp }}/ipa/SenikMarketing-unsigned.ipa
+            ${{ runner.temp }}/ipa/SenikMarketing-unsigned.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14
