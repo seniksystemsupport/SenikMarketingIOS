@@ -61,3 +61,5 @@ jobs:
             ${{ runner.temp }}/ipa/SenikMarketing-unsigned.ipa.sha256
           if-no-files-found: error
           retention-days: 14
+
+# Trigger build after initial repository setup.
